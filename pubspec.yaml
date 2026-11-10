@@ -1,0 +1,30 @@
+name: liteword_studio
+description: LiteWord Studio - lightweight Arabic-first document editor for handouts, books and research.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+  provider: ^6.1.2
+  google_fonts: ^6.2.1
+  flutter_colorpicker: ^1.1.0
+  pdf: ^3.11.1
+  printing: ^5.13.4
+  path_provider: ^2.1.5
+  file_picker: ^8.1.6
+  share_plus: ^10.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
