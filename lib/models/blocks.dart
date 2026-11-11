@@ -170,14 +170,6 @@ class ImageBlock extends Block {
       {'k': 'i', 'id': id, 'd': base64Encode(bytes), 'w': w, 'h': h, 'ar': aspect, 'lk': lock, 'al': align.index};
 }
 
-/// Forces following content onto a new page.
-class PageBreakBlock extends Block {
-  PageBreakBlock({String? id}) : super(id ?? newId());
-
-  @override
-  Map<String, dynamic> toJson() => {'k': 'b', 'id': id};
-}
-
 /// Hard page break: the next block starts on a new page.
 class PageBreakBlock extends Block {
   PageBreakBlock({String? id}) : super(id ?? newId());
