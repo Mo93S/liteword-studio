@@ -7,9 +7,10 @@ import '../models/document.dart';
 import '../services/export_service.dart';
 import '../widgets/ribbon_widgets.dart';
 import '../widgets/symbol_picker.dart';
+import '../utils/fonts.dart';
 import 'dialogs.dart';
+import 'option_dialogs.dart';
 
-const kFonts = ['Cairo', 'Amiri', 'Tajawal', 'Noto Naskh Arabic', 'Scheherazade New', 'Lateef', 'Roboto', 'Lora'];
 const kSizes = <double>[8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 28, 32, 36, 48, 60, 72];
 
 /// Word-style ribbon: 4 tabs. Wide screens show labelled groups,
@@ -133,7 +134,13 @@ class _RibbonState extends State<Ribbon> with SingleTickerProviderStateMixin {
           tooltip: 'نوع الخط',
           enabled: has,
           onSelected: ed.setFont,
-          itemBuilder: (_) => [for (final f in kFonts) PopupMenuItem(value: f, child: Text(f))],
+          itemBuilder: (_) => <PopupMenuEntry<String>>[
+            const PopupMenuItem<String>(enabled: false, height: 28, child: Text('عربي + إنجليزي', style: TextStyle(fontSize: 11))),
+            for (final f in kArabicFonts) PopupMenuItem<String>(value: f, child: Text(f)),
+            const PopupMenuDivider(),
+            const PopupMenuItem<String>(enabled: false, height: 28, child: Text('إنجليزي', style: TextStyle(fontSize: 11))),
+            for (final f in kLatinFonts) PopupMenuItem<String>(value: f, child: Text(f)),
+          ],
           child: Pill(text: st.font, width: 120),
         ),
         PopupMenuButton<double>(
@@ -194,7 +201,43 @@ class _RibbonState extends State<Ribbon> with SingleTickerProviderStateMixin {
   // ------------------------------------------------------------- INSERT
   List<Widget> _insert(EditorController ed, bool wide) {
     final inTable = ed.activeTable != null && ed.activePara != null;
+    final box = ed.activeBox;
     return [
+      RibbonGroup(label: 'صفحات', wide: wide, maxWidth: 260, children: [
+        ToolButton(
+          icon: Icons.note_add_outlined,
+          label: 'صفحة',
+          tooltip: 'إضافة صفحات جديدة (حتى 100)',
+          onTap: () async {
+            final n = await showPagesDialog(context, ed);
+            if (n != null) {
+              final done = ed.insertBlankPages(n);
+              if (done < n) _msg('الحد الأقصى 100 صفحة، تمت إضافة $done');
+            }
+          },
+        ),
+        ToolButton(icon: Icons.insert_page_break, label: 'فاصل', tooltip: 'فاصل صفحة', onTap: ed.insertPageBreak),
+        ToolButton(
+          icon: Icons.menu_book,
+          label: ed.cover == null ? 'غلاف' : 'تعديل الغلاف',
+          tooltip: 'صفحة الغلاف',
+          active: ed.cover != null,
+          onTap: () async {
+            if (ed.cover == null) ed.insertCover();
+            await showCoverDialog(context, ed);
+          },
+        ),
+      ]),
+      RibbonGroup(label: 'مربع نص', wide: wide, maxWidth: 220, children: [
+        ToolButton(icon: Icons.text_fields, label: 'مربع نص', tooltip: 'إدراج مربع نص', onTap: ed.insertTextBox),
+        ToolButton(
+          icon: Icons.tune,
+          label: 'خصائص',
+          tooltip: 'خصائص مربع النص',
+          onTap: box == null ? null : () => showTextBoxDialog(context, ed, box),
+        ),
+        ToolButton(icon: Icons.delete_outline, tooltip: 'حذف مربع النص', onTap: box == null ? null : () => ed.deleteBox(box)),
+      ]),
       RibbonGroup(label: 'جدول', wide: wide, maxWidth: 360, children: [
         ToolButton(
           icon: Icons.table_chart,
@@ -255,17 +298,28 @@ class _RibbonState extends State<Ribbon> with SingleTickerProviderStateMixin {
   List<Widget> _layout(EditorController ed, bool wide) {
     final d = ed.doc;
     return [
-      RibbonGroup(label: 'الصفحة', wide: wide, maxWidth: 360, children: [
-        PopupMenuButton<double>(
-          tooltip: 'الهوامش',
-          onSelected: ed.setMargin,
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 1.27, child: Text('ضيق (1.27 سم)')),
-            PopupMenuItem(value: 2.0, child: Text('متوسط (2 سم)')),
-            PopupMenuItem(value: 2.54, child: Text('عادي (2.54 سم)')),
-            PopupMenuItem(value: 3.5, child: Text('واسع (3.5 سم)')),
-          ],
-          child: Pill(text: 'هوامش ${d.margin} سم', width: 120),
+      RibbonGroup(label: 'إعداد الصفحة', wide: wide, maxWidth: 420, children: [
+        ToolButton(icon: Icons.crop_free, label: 'هوامش', tooltip: 'الهوامش', onTap: () => showMarginsDialog(context, ed)),
+        ToolButton(
+          icon: Icons.vertical_align_top,
+          label: 'ترويسة',
+          tooltip: 'الترويسة (الرأس)',
+          active: d.header.enabled,
+          onTap: () => showHeaderFooterDialog(context, ed, true),
+        ),
+        ToolButton(
+          icon: Icons.vertical_align_bottom,
+          label: 'تذييل',
+          tooltip: 'التذييل (الأسفل)',
+          active: d.footer.enabled,
+          onTap: () => showHeaderFooterDialog(context, ed, false),
+        ),
+        ToolButton(
+          icon: Icons.border_outer,
+          label: 'حدود الصفحة',
+          tooltip: 'حدود الصفحة',
+          active: d.border.enabled,
+          onTap: () => showPageBorderDialog(context, ed),
         ),
         ToolButton(
           icon: Icons.water_drop_outlined,
@@ -277,6 +331,9 @@ class _RibbonState extends State<Ribbon> with SingleTickerProviderStateMixin {
             if (r != null) ed.setWatermark(r.text.isEmpty ? null : r);
           },
         ),
+        ToolButton(icon: Icons.grid_on, label: 'حدود النص', tooltip: 'إظهار حدود النص', active: ed.showGuides, onTap: ed.toggleGuides),
+      ]),
+      RibbonGroup(label: 'الفقرة', wide: wide, maxWidth: 300, children: [
         ToolButton(
           icon: d.rtl ? Icons.format_textdirection_r_to_l : Icons.format_textdirection_l_to_r,
           label: d.rtl ? 'مستند RTL' : 'مستند LTR',

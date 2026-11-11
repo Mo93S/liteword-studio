@@ -30,8 +30,15 @@ class LiteWordApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
+      themeMode: ThemeMode.system,
       theme: ThemeData(
         useMaterial3: true,
+        colorSchemeSeed: const Color(0xFF2B579A),
+        visualDensity: VisualDensity.compact,
+      ),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
         colorSchemeSeed: const Color(0xFF2B579A),
         visualDensity: VisualDensity.compact,
       ),

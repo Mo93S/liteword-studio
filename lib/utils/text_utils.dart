@@ -6,6 +6,8 @@ const double kPx = 96 / 72;
 const double kPageW = 794; // A4 @ 96dpi
 const double kPageH = 1123;
 const double kCmPx = 96 / 2.54;
+const double kPageGap = 16; // grey gap between pages on screen
+const double kPageStride = kPageH + kPageGap;
 
 /// Every paragraph text starts with a zero-width sentinel so that a Backspace
 /// at the paragraph start can be detected (merge with previous paragraph).
@@ -93,4 +95,35 @@ Map<String, String> listLabels(List<Block> blocks, bool docRtl) {
     }
   }
   return out;
+}
+
+/// Page-number formats: 0 = 1,2,3  1 = i,ii,iii  2 = أ,ب,ج  3 = ١،٢،٣
+String formatPageNumber(int n, int fmt) {
+  if (n < 1) return '';
+  switch (fmt) {
+    case 1:
+      return _roman(n);
+    case 2:
+      return _arLetters[(n - 1) % _arLetters.length];
+    case 3:
+      return n.toString().split('').map((c) => String.fromCharCode(0x0660 + int.parse(c))).join();
+    default:
+      return '$n';
+  }
+}
+
+/// {#} = current page number, {N} = total pages.
+String fillTokens(String s, {required int page, required int pages, required int fmt}) =>
+    s.replaceAll('{#}', formatPageNumber(page, fmt)).replaceAll('{N}', formatPageNumber(pages, fmt));
+
+/// Replaces {page} / {pages} in header/footer text. digits: 0 western, 1 arabic-indic.
+String resolveTokens(String s, int page, int pages, int digits) {
+  String n(int v) {
+    final t = '$v';
+    if (digits != 1) return t;
+    const ar = '٠١٢٣٤٥٦٧٨٩';
+    return t.split('').map((c) => ar[int.parse(c)]).join();
+  }
+
+  return s.replaceAll('{page}', n(page)).replaceAll('{pages}', n(pages));
 }

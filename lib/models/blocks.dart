@@ -10,6 +10,7 @@ String newId() => '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}${_
 
 abstract class Block {
   final String id;
+  String? tag; // e.g. 'cover'
   Block(this.id);
   Map<String, dynamic> toJson();
   void dispose() {}
@@ -167,4 +168,130 @@ class ImageBlock extends Block {
   @override
   Map<String, dynamic> toJson() =>
       {'k': 'i', 'id': id, 'd': base64Encode(bytes), 'w': w, 'h': h, 'ar': aspect, 'lk': lock, 'al': align.index};
+}
+
+/// Forces following content onto a new page.
+class PageBreakBlock extends Block {
+  PageBreakBlock({String? id}) : super(id ?? newId());
+
+  @override
+  Map<String, dynamic> toJson() => {'k': 'b', 'id': id};
+}
+
+/// Hard page break: the next block starts on a new page.
+class PageBreakBlock extends Block {
+  PageBreakBlock({String? id}) : super(id ?? newId());
+  @override
+  Map<String, dynamic> toJson() => {'k': 'b', 'id': id};
+}
+
+/// Cover page (always one full page).
+class CoverBlock extends Block {
+  String title, subtitle, author, org, date;
+  String font;
+  double titleSize, subSize, infoSize;
+  int titleColor, textColor;
+  bool frame;
+  int frameColor;
+  double frameWidth;
+  int vpos; // 0 top, 1 middle, 2 bottom
+
+  CoverBlock({
+    String? id,
+    this.title = 'عنوان المستند',
+    this.subtitle = '',
+    this.author = '',
+    this.org = '',
+    this.date = '',
+    this.font = 'Cairo',
+    this.titleSize = 36,
+    this.subSize = 20,
+    this.infoSize = 16,
+    this.titleColor = 0xFF1F3A66,
+    this.textColor = 0xFF333333,
+    this.frame = true,
+    this.frameColor = 0xFF1F3A66,
+    this.frameWidth = 3,
+    this.vpos = 1,
+  }) : super(id ?? newId());
+
+  factory CoverBlock.fromJson(Map<String, dynamic> j) => CoverBlock(
+        id: j['id'] as String?,
+        title: (j['t'] ?? '') as String,
+        subtitle: (j['st'] ?? '') as String,
+        author: (j['a'] ?? '') as String,
+        org: (j['o'] ?? '') as String,
+        date: (j['d'] ?? '') as String,
+        font: (j['f'] ?? 'Cairo') as String,
+        titleSize: ((j['ts'] ?? 36) as num).toDouble(),
+        subSize: ((j['ss'] ?? 20) as num).toDouble(),
+        infoSize: ((j['is'] ?? 16) as num).toDouble(),
+        titleColor: (j['tc'] ?? 0xFF1F3A66) as int,
+        textColor: (j['xc'] ?? 0xFF333333) as int,
+        frame: (j['fr'] ?? true) as bool,
+        frameColor: (j['fc'] ?? 0xFF1F3A66) as int,
+        frameWidth: ((j['fw'] ?? 3) as num).toDouble(),
+        vpos: (j['v'] ?? 1) as int,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'k': 'c', 'id': id, 't': title, 'st': subtitle, 'a': author, 'o': org, 'd': date, 'f': font,
+        'ts': titleSize, 'ss': subSize, 'is': infoSize, 'tc': titleColor, 'xc': textColor,
+        'fr': frame, 'fc': frameColor, 'fw': frameWidth, 'v': vpos,
+      };
+}
+
+/// Floating text box (positioned in sheet coordinates, drawn above the text).
+class TextBoxData {
+  final String id;
+  double x, y, w, h, rot; // px (sheet coordinates), degrees
+  final ParagraphBlock para;
+  int? fill;
+  int borderColor;
+  double borderWidth; // pt
+  int borderStyle; // 0 solid, 1 dashed, 2 dotted, 3 none
+  double radius, pad;
+  bool shadow;
+
+  TextBoxData({
+    String? id,
+    required this.x,
+    required this.y,
+    this.w = 240,
+    this.h = 90,
+    this.rot = 0,
+    required this.para,
+    this.fill,
+    this.borderColor = 0xFF000000,
+    this.borderWidth = 1,
+    this.borderStyle = 0,
+    this.radius = 0,
+    this.pad = 8,
+    this.shadow = false,
+  }) : id = id ?? newId();
+
+  factory TextBoxData.fromJson(Map<String, dynamic> j) => TextBoxData(
+        id: j['id'] as String?,
+        x: (j['x'] as num).toDouble(),
+        y: (j['y'] as num).toDouble(),
+        w: ((j['w'] ?? 240) as num).toDouble(),
+        h: ((j['h'] ?? 90) as num).toDouble(),
+        rot: ((j['r'] ?? 0) as num).toDouble(),
+        para: ParagraphBlock.fromJson(j['p'] as Map<String, dynamic>),
+        fill: j['fl'] as int?,
+        borderColor: (j['bc'] ?? 0xFF000000) as int,
+        borderWidth: ((j['bw'] ?? 1) as num).toDouble(),
+        borderStyle: (j['bs'] ?? 0) as int,
+        radius: ((j['rd'] ?? 0) as num).toDouble(),
+        pad: ((j['pd'] ?? 8) as num).toDouble(),
+        shadow: (j['sh'] ?? false) as bool,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id, 'x': x, 'y': y, 'w': w, 'h': h, 'r': rot, 'p': para.toJson(), 'fl': fill,
+        'bc': borderColor, 'bw': borderWidth, 'bs': borderStyle, 'rd': radius, 'pd': pad, 'sh': shadow,
+      };
+
+  void dispose() => para.dispose();
 }

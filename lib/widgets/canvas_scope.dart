@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 /// Lets a text field ask the zoomable canvas to scroll it into view.
 abstract class RevealHost {
   void reveal(BuildContext fieldContext);
+  double get scale;
 }
 
 class CanvasScope extends InheritedWidget {

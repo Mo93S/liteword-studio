@@ -60,6 +60,7 @@ class RichTextController extends TextEditingController {
   StyleAttrs typing; // style applied to the next typed character
   bool _lock = false; // typing style was toggled explicitly with a collapsed caret
   bool _bypass = false;
+  TextSelection? _lastRange; // last non-collapsed selection (survives focus loss)
 
   final FocusNode focus = FocusNode();
   VoidCallback? onBeforeEdit; // called right BEFORE a text change is applied (undo checkpoint)
@@ -71,8 +72,18 @@ class RichTextController extends TextEditingController {
   StyleAttrs get baseStyle => _styles.length > 1 ? _styles[1] : _styles[0];
   List<StyleAttrs> get tailStyles => _styles.sublist(1);
 
-  StyleAttrs get selectionStyle {
+  /// Menus and dialogs steal focus and Flutter then clears the selection;
+  /// in that case fall back to the last range the user had selected.
+  TextSelection get _effSel {
     final s = selection;
+    if (s.isValid && !s.isCollapsed) return s;
+    final r = _lastRange;
+    if (!focus.hasFocus && r != null && r.isValid && r.end <= text.length) return r;
+    return s;
+  }
+
+  StyleAttrs get selectionStyle {
+    final s = _effSel;
     if (s.isValid && !s.isCollapsed && _styles.length > 1) {
       return _styles[s.start.clamp(1, _styles.length - 1).toInt()];
     }
@@ -96,7 +107,7 @@ class RichTextController extends TextEditingController {
 
   /// True when every selected character (or the typing style if collapsed) satisfies [test].
   bool all(bool Function(StyleAttrs) test) {
-    final s = selection;
+    final s = _effSel;
     if (!s.isValid || s.isCollapsed) return test(typing);
     final a = math.max(1, s.start), b = math.min(s.end, _styles.length);
     if (a >= b) return test(typing);
@@ -108,7 +119,8 @@ class RichTextController extends TextEditingController {
 
   // -------------------------------------------------------------- formatting
   void apply(StyleAttrs Function(StyleAttrs) f) {
-    final s = selection;
+    final s = _effSel;
+    final restore = (!(selection.isValid && !selection.isCollapsed) && s.isValid && !s.isCollapsed) ? s : null;
     if (!s.isValid || s.isCollapsed) {
       typing = f(typing);
       _lock = true;
@@ -121,6 +133,7 @@ class RichTextController extends TextEditingController {
       _styles[i] = f(_styles[i]);
     }
     notifyListeners();
+    if (restore != null) selection = restore;
   }
 
   /// Replace selection (or insert at caret) using the typing style.
@@ -231,6 +244,11 @@ class RichTextController extends TextEditingController {
       }
     }
     v = v.copyWith(selection: _clamp(v.selection, v.text.length));
+    if (v.selection.isValid && !v.selection.isCollapsed) {
+      _lastRange = v.selection;
+    } else if (focus.hasFocus && v.selection.isValid) {
+      _lastRange = null;
+    }
     final selChanged = v.selection != value.selection;
     super.value = v;
 

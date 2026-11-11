@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'blocks.dart';
+import 'page_setup.dart';
 import 'style_attrs.dart';
 
 class WatermarkData {
@@ -24,11 +27,36 @@ class DocumentModel {
   final int rev = ++_revCounter;
   String title;
   bool rtl;
-  double margin; // cm
+  double mt, mb, ml, mr; // margins in cm (top, bottom, left, right)
   WatermarkData? watermark;
+  HeaderFooterData header, footer;
+  PageBorderData border;
   final List<Block> blocks;
+  final List<TextBoxData> boxes;
 
-  DocumentModel({this.title = 'مستند جديد', this.rtl = true, this.margin = 2.54, this.watermark, required this.blocks});
+  DocumentModel({
+    this.title = 'مستند جديد',
+    this.rtl = true,
+    this.mt = 2.54,
+    this.mb = 2.54,
+    this.ml = 2.54,
+    this.mr = 2.54,
+    this.watermark,
+    HeaderFooterData? header,
+    HeaderFooterData? footer,
+    PageBorderData? border,
+    List<TextBoxData>? boxes,
+    required this.blocks,
+  })  : header = header ?? HeaderFooterData(),
+        footer = footer ?? HeaderFooterData(center: '{page}'),
+        border = border ?? PageBorderData(),
+        boxes = boxes ?? <TextBoxData>[];
+
+  /// Effective top/bottom inset (cm): margin, or more when a header/footer needs room.
+  double get topInset =>
+      header.enabled ? math.max(mt, header.dist + header.size * 1.5 / 72 * 2.54 + 0.25) : mt;
+  double get bottomInset =>
+      footer.enabled ? math.max(mb, footer.dist + footer.size * 1.5 / 72 * 2.54 + 0.25) : mb;
 
   factory DocumentModel.blank({bool rtl = true}) =>
       DocumentModel(rtl: rtl, blocks: [ParagraphBlock.empty(style: const StyleAttrs())]);
@@ -47,30 +75,55 @@ class DocumentModel {
         case 'i':
           blocks.add(ImageBlock.fromJson(m));
           break;
+        case 'b':
+          blocks.add(PageBreakBlock(id: m['id'] as String?));
+          break;
+        case 'c':
+          blocks.add(CoverBlock.fromJson(m));
+          break;
       }
     }
     if (blocks.isEmpty) blocks.add(ParagraphBlock.empty());
+    final m0 = ((j['margin'] ?? 2.54) as num).toDouble();
+    double mg(String k) => ((j[k] ?? m0) as num).toDouble();
     return DocumentModel(
       title: (j['title'] ?? 'مستند') as String,
       rtl: (j['rtl'] ?? true) as bool,
-      margin: ((j['margin'] ?? 2.54) as num).toDouble(),
+      mt: mg('mt'),
+      mb: mg('mb'),
+      ml: mg('ml'),
+      mr: mg('mr'),
       watermark: j['wm'] == null ? null : WatermarkData.fromJson(j['wm'] as Map<String, dynamic>),
+      header: j['hdr'] == null ? null : HeaderFooterData.fromJson(j['hdr'] as Map<String, dynamic>),
+      footer: j['ftr'] == null ? null : HeaderFooterData.fromJson(j['ftr'] as Map<String, dynamic>),
+      border: j['pb'] == null ? null : PageBorderData.fromJson(j['pb'] as Map<String, dynamic>),
+      boxes: [for (final b in (j['boxes'] ?? const []) as List) TextBoxData.fromJson(b as Map<String, dynamic>)],
       blocks: blocks,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'v': 1,
+        'v': 2,
         'app': 'LiteWord Studio',
         'title': title,
         'rtl': rtl,
-        'margin': margin,
+        'mt': mt,
+        'mb': mb,
+        'ml': ml,
+        'mr': mr,
         if (watermark != null) 'wm': watermark!.toJson(),
+        'hdr': header.toJson(),
+        'ftr': footer.toJson(),
+        'pb': border.toJson(),
+        'boxes': boxes.map((b) => b.toJson()).toList(),
         'blocks': blocks.map((b) => b.toJson()).toList(),
       };
 
   void dispose() {
     for (final b in blocks) {
+      b.dispose();
+    }
+    for (final b in boxes) {
       b.dispose();
     }
   }

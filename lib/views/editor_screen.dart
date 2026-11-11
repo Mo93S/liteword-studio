@@ -101,7 +101,7 @@ class _TitleBarState extends State<_TitleBar> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Container(
-      color: cs.primary,
+      color: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF1B2A41) : const Color(0xFF2B579A),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(children: [
         const Icon(Icons.edit_document, color: Colors.white, size: 20),

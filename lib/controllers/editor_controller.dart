@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../models/blocks.dart';
 import '../models/document.dart';
+import '../models/page_setup.dart';
 import '../models/style_attrs.dart';
 import '../services/storage_service.dart';
 import '../utils/text_utils.dart';
@@ -41,6 +42,9 @@ class EditorController extends ChangeNotifier {
   ParagraphBlock? activePara; // focused paragraph (top-level or table cell)
   TableBlock? activeTable; // set when activePara is inside a table
   ImageBlock? activeImage;
+  TextBoxData? activeBox;
+  double viewTopY = 0; // visible top of the sheet (set by the canvas)
+  bool showGuides = false;
 
   /// Ribbon refresh signal (cheap; does not rebuild the canvas).
   final ValueNotifier<int> fmtTick = ValueNotifier<int>(0);
@@ -50,12 +54,15 @@ class EditorController extends ChangeNotifier {
 
   RichTextController? get rc => activePara?.rc;
   StyleAttrs get currentStyle => activePara?.rc.selectionStyle ?? const StyleAttrs();
-  double get contentWidth => kPageW - 2 * doc.margin * kCmPx;
+  double get contentWidth => kPageW - (doc.ml + doc.mr) * kCmPx;
 
   // ------------------------------------------------------------ wiring
   void _attach(DocumentModel d) {
     for (final b in d.blocks) {
       _wireBlock(b);
+    }
+    for (final bx in d.boxes) {
+      _wire(bx.para, null, box: bx);
     }
   }
 
@@ -71,21 +78,22 @@ class EditorController extends ChangeNotifier {
     }
   }
 
-  void _wire(ParagraphBlock p, TableBlock? t) {
+  void _wire(ParagraphBlock p, TableBlock? t, {TextBoxData? box}) {
     final rc = p.rc;
     rc.onBeforeEdit = _onBeforeEdit;
-    rc.onMergeRequest = t == null ? () => _mergeBack(p) : null;
+    rc.onMergeRequest = (t == null && box == null) ? () => _mergeBack(p) : null;
     rc.addListener(() {
       if (identical(p, activePara)) fmtTick.value++;
     });
     rc.focus.addListener(() {
       if (rc.focus.hasFocus) {
+        final changed = activeImage != null || !identical(activeBox, box);
         activePara = p;
         activeTable = t;
-        final had = activeImage != null;
         activeImage = null;
+        activeBox = box;
         fmtTick.value++;
-        if (had) notifyListeners();
+        if (changed) notifyListeners();
       }
     });
   }
@@ -141,6 +149,7 @@ class EditorController extends ChangeNotifier {
     activePara = null;
     activeTable = null;
     activeImage = null;
+    activeBox = null;
     _lastTag = '';
     notifyListeners();
     _disposeLater(() => old.dispose());
@@ -163,6 +172,9 @@ class EditorController extends ChangeNotifier {
           }
         }
       }
+    }
+    for (final bx in doc.boxes) {
+      if (bx.para.id == id) return bx.para;
     }
     return null;
   }
@@ -208,6 +220,9 @@ class EditorController extends ChangeNotifier {
           }
         }
       }
+    }
+    for (final bx in doc.boxes) {
+      add(bx.para);
     }
     stats.value = DocStats(w, c);
   }
@@ -500,7 +515,7 @@ class EditorController extends ChangeNotifier {
     final res = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
     final bytes = res?.files.single.bytes;
     if (bytes == null) return;
-    final img = await decodeImageFromList(bytes);
+    final img = await ui.decodeImageFromList(bytes);
     final aspect = img.width / img.height;
     final w = math.min(img.width.toDouble(), contentWidth);
     img.dispose();
@@ -513,6 +528,7 @@ class EditorController extends ChangeNotifier {
   void selectImage(ImageBlock b) {
     FocusManager.instance.primaryFocus?.unfocus();
     activeImage = b;
+    activeBox = null;
     activePara = null;
     activeTable = null;
     notifyListeners();
@@ -563,9 +579,121 @@ class EditorController extends ChangeNotifier {
     _touch();
   }
 
-  void setMargin(double cm) {
+  void setMargins(double t, double b, double l, double r) {
     checkpoint('struct');
-    doc.margin = cm;
+    doc.mt = t;
+    doc.mb = b;
+    doc.ml = l;
+    doc.mr = r;
+    _touch();
+  }
+
+  void setHeader(HeaderFooterData h) {
+    checkpoint('struct');
+    doc.header = h;
+    _touch();
+  }
+
+  void setFooter(HeaderFooterData h) {
+    checkpoint('struct');
+    doc.footer = h;
+    _touch();
+  }
+
+  void setPageBorder(PageBorderData b) {
+    checkpoint('struct');
+    doc.border = b;
+    _touch();
+  }
+
+  void toggleGuides() {
+    showGuides = !showGuides;
+    notifyListeners();
+    fmtTick.value++;
+  }
+
+  // ------------------------------------------------------- pages / cover
+  CoverBlock? get cover =>
+      doc.blocks.isNotEmpty && doc.blocks.first is CoverBlock ? doc.blocks.first as CoverBlock : null;
+
+  void insertCover() {
+    if (cover != null) return;
+    checkpoint('struct');
+    doc.blocks.insert(0, CoverBlock());
+    _touch();
+  }
+
+  void updateCover(void Function(CoverBlock c) f) {
+    final c = cover;
+    if (c == null) return;
+    checkpoint('struct');
+    f(c);
+    _touch();
+  }
+
+  void deleteCover() {
+    final c = cover;
+    if (c == null) return;
+    checkpoint('struct');
+    doc.blocks.remove(c);
+    _ensureTrailingParagraph();
+    _touch();
+  }
+
+  void deleteBlock(Block b) {
+    checkpoint('struct');
+    doc.blocks.remove(b);
+    _ensureTrailingParagraph();
+    _disposeLater(b.dispose);
+    _touch();
+  }
+
+  void insertPageBreak() => insertBlankPages(1);
+
+  /// Inserts [n] new pages after the current block (document is capped at 100 pages).
+  /// Returns how many were actually added.
+  int insertBlankPages(int n) {
+    n = math.min(n, 100 - pages.value);
+    if (n <= 0) return 0;
+    checkpoint('struct');
+    var at = _activeIndex();
+    ParagraphBlock? last;
+    for (var i = 0; i < n; i++) {
+      doc.blocks.insert(++at, PageBreakBlock());
+      last = ParagraphBlock.empty(style: currentStyle.copyWith(clearHighlight: true, script: 0));
+      _wire(last, null);
+      doc.blocks.insert(++at, last);
+    }
+    _touch();
+    if (last != null) focusPara(last, offset: 1);
+    return n;
+  }
+
+  // ------------------------------------------------------------ text boxes
+  void insertTextBox() {
+    checkpoint('struct');
+    final p = ParagraphBlock.empty(style: const StyleAttrs());
+    final b = TextBoxData(x: (kPageW - 240) / 2, y: viewTopY + 80, para: p);
+    _wire(p, null, box: b);
+    doc.boxes.add(b);
+    activeBox = b;
+    _touch();
+    focusPara(p, offset: 1);
+  }
+
+  void updateBox(TextBoxData b, void Function(TextBoxData b) f) {
+    checkpoint('img');
+    f(b);
+    notifyListeners();
+    _scheduleSave();
+  }
+
+  void deleteBox(TextBoxData b) {
+    checkpoint('struct');
+    doc.boxes.remove(b);
+    if (identical(activeBox, b)) activeBox = null;
+    if (identical(activePara, b.para)) activePara = null;
+    _disposeLater(b.dispose);
     _touch();
   }
 
@@ -584,6 +712,7 @@ class EditorController extends ChangeNotifier {
     activePara = null;
     activeTable = null;
     activeImage = null;
+    activeBox = null;
     notifyListeners();
     _disposeLater(() => old.dispose());
     _recount();
