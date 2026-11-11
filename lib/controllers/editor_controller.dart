@@ -515,7 +515,7 @@ class EditorController extends ChangeNotifier {
     final res = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
     final bytes = res?.files.single.bytes;
     if (bytes == null) return;
-    final img = await ui.decodeImageFromList(bytes);
+    final img = await decodeImageFromList(bytes);
     final aspect = img.width / img.height;
     final w = math.min(img.width.toDouble(), contentWidth);
     img.dispose();
