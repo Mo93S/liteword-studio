@@ -57,7 +57,6 @@ class _BoxPainter extends CustomPainter {
   bool shouldRepaint(covariant _BoxPainter old) => true;
 }
 
-/// Floating, draggable text box with a full rich-text editor inside.
 class TextBoxWidget extends StatelessWidget {
   const TextBoxWidget({super.key, required this.box, required this.docRtl});
   final TextBoxData box;
@@ -65,20 +64,21 @@ class TextBoxWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ed = context.read<EditorController>();
+    final ed = context.watch<EditorController>();
     final selected = identical(ed.activeBox, box);
 
     Widget chip(IconData icon, {VoidCallback? onTap, GestureDragUpdateCallback? onPan, String? tip}) => Tooltip(
           message: tip ?? '',
           child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: onTap,
             onPanStart: onPan == null ? null : (_) => ed.checkpoint('img'),
             onPanUpdate: onPan,
             child: Container(
               margin: const EdgeInsets.only(right: 4),
-              padding: const EdgeInsets.all(4),
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(color: const Color(0xFF2B79D8), borderRadius: BorderRadius.circular(6)),
-              child: Icon(icon, size: 16, color: Colors.white),
+              child: Icon(icon, size: 18, color: Colors.white),
             ),
           ),
         );
@@ -89,7 +89,10 @@ class TextBoxWidget extends StatelessWidget {
       width: box.w,
       child: Transform.rotate(
         angle: box.rot * math.pi / 180,
-        child: Stack(clipBehavior: Clip.none, children: [
+        child: Stack(
+          clipBehavior: Clip.none, 
+          fit: StackFit.loose,
+          children: [
           CustomPaint(
             painter: _BoxPainter(box, selected),
             child: Container(
@@ -100,9 +103,11 @@ class TextBoxWidget extends StatelessWidget {
           ),
           if (selected) ...[
             Positioned(
-              top: -34,
+              top: -40,
               left: 0,
-              child: Row(children: [
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                 chip(Icons.open_with, tip: 'تحريك', onPan: (d) {
                   final z = ed.zoom.value;
                   ed.updateBox(box, (b) {
@@ -115,8 +120,8 @@ class TextBoxWidget extends StatelessWidget {
               ]),
             ),
             Positioned(
-              right: -12,
-              bottom: -12,
+              right: -16,
+              bottom: -16,
               child: chip(Icons.south_east, tip: 'تغيير الحجم', onPan: (d) {
                 final z = ed.zoom.value;
                 ed.updateBox(box, (b) {

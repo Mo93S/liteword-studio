@@ -19,25 +19,13 @@ TextStyle styleToText(StyleAttrs a, {double? px}) {
   final bg = a.highlight == null ? null : Color(a.highlight!);
   try {
     return GoogleFonts.getFont(a.font,
-        fontSize: size,
-        fontWeight: weight,
-        fontStyle: fstyle,
-        color: Color(a.color),
-        backgroundColor: bg,
-        decoration: decoration);
+        fontSize: size, fontWeight: weight, fontStyle: fstyle, color: Color(a.color), backgroundColor: bg, decoration: decoration);
   } catch (_) {
     return TextStyle(
-        fontSize: size,
-        fontWeight: weight,
-        fontStyle: fstyle,
-        color: Color(a.color),
-        backgroundColor: bg,
-        decoration: decoration);
+        fontSize: size, fontWeight: weight, fontStyle: fstyle, color: Color(a.color), backgroundColor: bg, decoration: decoration);
   }
 }
 
-/// A TextEditingController that keeps a style per UTF-16 code unit.
-/// Text always starts with [kSentinel] (index 0) – never shown, never counted.
 class RichTextController extends TextEditingController {
   RichTextController._(String text, this._styles, this.typing) : super(text: text);
 
@@ -57,23 +45,21 @@ class RichTextController extends TextEditingController {
       RichTextController._(kSentinel + plain, [first, ...styles], typing);
 
   List<StyleAttrs> _styles;
-  StyleAttrs typing; // style applied to the next typed character
-  bool _lock = false; // typing style was toggled explicitly with a collapsed caret
+  StyleAttrs typing;
+  bool _lock = false;
   bool _bypass = false;
-  TextSelection? _lastRange; // last non-collapsed selection (survives focus loss)
+  TextSelection? _lastRange; 
 
   final FocusNode focus = FocusNode();
-  VoidCallback? onBeforeEdit; // called right BEFORE a text change is applied (undo checkpoint)
-  VoidCallback? onMergeRequest; // Backspace pressed at paragraph start
+  VoidCallback? onBeforeEdit; 
+  VoidCallback? onMergeRequest; 
+  VoidCallback? onStyleChanged; 
 
-  // ---------------------------------------------------------------- queries
   String get plain => text.length > 1 ? text.substring(1) : '';
   StyleAttrs get firstStyle => _styles.first;
   StyleAttrs get baseStyle => _styles.length > 1 ? _styles[1] : _styles[0];
   List<StyleAttrs> get tailStyles => _styles.sublist(1);
 
-  /// Menus and dialogs steal focus and Flutter then clears the selection;
-  /// in that case fall back to the last range the user had selected.
   TextSelection get _effSel {
     final s = selection;
     if (s.isValid && !s.isCollapsed) return s;
@@ -105,7 +91,6 @@ class RichTextController extends TextEditingController {
     return out;
   }
 
-  /// True when every selected character (or the typing style if collapsed) satisfies [test].
   bool all(bool Function(StyleAttrs) test) {
     final s = _effSel;
     if (!s.isValid || s.isCollapsed) return test(typing);
@@ -117,7 +102,6 @@ class RichTextController extends TextEditingController {
     return true;
   }
 
-  // -------------------------------------------------------------- formatting
   void apply(StyleAttrs Function(StyleAttrs) f) {
     final s = _effSel;
     final restore = (!(selection.isValid && !selection.isCollapsed) && s.isValid && !s.isCollapsed) ? s : null;
@@ -126,6 +110,7 @@ class RichTextController extends TextEditingController {
       _lock = true;
       if (text.length == 1) _styles[0] = typing;
       notifyListeners();
+      onStyleChanged?.call();
       return;
     }
     final a = math.max(1, s.start), b = math.min(s.end, _styles.length);
@@ -133,10 +118,10 @@ class RichTextController extends TextEditingController {
       _styles[i] = f(_styles[i]);
     }
     notifyListeners();
+    onStyleChanged?.call();
     if (restore != null) selection = restore;
   }
 
-  /// Replace selection (or insert at caret) using the typing style.
   void insertText(String s) {
     final sel = selection.isValid ? selection : TextSelection.collapsed(offset: text.length);
     final a = math.max(1, sel.start), b = math.max(a, sel.end);
@@ -146,7 +131,6 @@ class RichTextController extends TextEditingController {
     );
   }
 
-  // ------------------------------------------------ structural helpers (raw)
   void _setRaw(String t, List<StyleAttrs> st, TextSelection sel) {
     _styles = st;
     _bypass = true;
@@ -154,7 +138,6 @@ class RichTextController extends TextEditingController {
     _bypass = false;
   }
 
-  /// Cuts the text at the newline located at [i]; returns what follows it.
   ({String text, List<StyleAttrs> styles}) cutFrom(int i) {
     final tailText = text.substring(i + 1);
     final tailStyles = _styles.sublist(math.min(i + 1, _styles.length));
@@ -178,7 +161,6 @@ class RichTextController extends TextEditingController {
     _setRaw(text + o.plain, [..._styles, ...o.tailStyles], TextSelection.collapsed(offset: at));
   }
 
-  // --------------------------------------------------------- value override
   void _resync() {
     if (_styles.length > text.length) {
       _styles = _styles.sublist(0, text.length);
@@ -237,7 +219,6 @@ class RichTextController extends TextEditingController {
       final d = _adjust(old, v.text);
       added = d[2];
       if (v.text.isEmpty || v.text.codeUnitAt(0) != 0x200B) {
-        // The sentinel was deleted -> restore it; a lone Backspace means "merge".
         merge = d[0] == 0 && d[1] == 1 && d[2] == 0;
         _styles.insert(0, _styles.isNotEmpty ? _styles.first : typing);
         v = TextEditingValue(text: kSentinel + v.text, selection: _shift(v.selection, 1));
@@ -256,6 +237,7 @@ class RichTextController extends TextEditingController {
       if (selChanged && v.selection.isValid && v.selection.isCollapsed) {
         _lock = false;
         typing = _before(v.selection.baseOffset);
+        onStyleChanged?.call();
       }
     } else if (added == 0 && !_lock && v.selection.isValid && v.selection.isCollapsed) {
       typing = _before(v.selection.baseOffset);
@@ -263,7 +245,6 @@ class RichTextController extends TextEditingController {
     if (merge) scheduleMicrotask(() => onMergeRequest?.call());
   }
 
-  // ------------------------------------------------------------- rendering
   @override
   TextSpan buildTextSpan({required BuildContext context, TextStyle? style, required bool withComposing}) {
     _resync();

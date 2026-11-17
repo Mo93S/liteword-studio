@@ -13,8 +13,6 @@ import 'option_dialogs.dart';
 
 const kSizes = <double>[8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 28, 32, 36, 48, 60, 72];
 
-/// Word-style ribbon: 4 tabs. Wide screens show labelled groups,
-/// phones show a compact scrolling strip that can be collapsed.
 class Ribbon extends StatefulWidget {
   const Ribbon({super.key});
   @override
@@ -28,7 +26,13 @@ class _RibbonState extends State<Ribbon> with SingleTickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _tab.addListener(() => setState(() {}));
+    _tab.addListener(() {
+        if (_tab.indexIsChanging) {
+          setState(() {
+             _open = true;
+          });
+        }
+    });
   }
 
   @override
@@ -64,9 +68,11 @@ class _RibbonState extends State<Ribbon> with SingleTickerProviderStateMixin {
               Expanded(
                 child: TabBar(
                   controller: _tab,
-                  onTap: (i) => setState(() {
-                    _open = (i == _tab.index && !wide && _open) ? false : true;
-                  }),
+                  onTap: (i) {
+                      if(i == _tab.index) {
+                          setState(() => _open = !_open);
+                      }
+                  },
                   tabs: const [
                     Tab(text: 'الرئيسية', height: 34),
                     Tab(text: 'إدراج', height: 34),
@@ -75,12 +81,11 @@ class _RibbonState extends State<Ribbon> with SingleTickerProviderStateMixin {
                   ],
                 ),
               ),
-              if (!wide)
-                IconButton(
+              IconButton(
                   tooltip: _open ? 'طي الشريط' : 'إظهار الشريط',
-                  icon: Icon(_open ? Icons.expand_less : Icons.expand_more),
+                  icon: Icon(_open ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down),
                   onPressed: () => setState(() => _open = !_open),
-                ),
+              ),
             ]),
             if (_open)
               SizedBox(
@@ -108,18 +113,13 @@ class _RibbonState extends State<Ribbon> with SingleTickerProviderStateMixin {
 
   List<Widget> _groups(EditorController ed, bool wide) {
     switch (_tab.index) {
-      case 0:
-        return _sep(_home(ed, wide), wide);
-      case 1:
-        return _sep(_insert(ed, wide), wide);
-      case 2:
-        return _sep(_layout(ed, wide), wide);
-      default:
-        return _sep(_tools(ed, wide), wide);
+      case 0: return _sep(_home(ed, wide), wide);
+      case 1: return _sep(_insert(ed, wide), wide);
+      case 2: return _sep(_layout(ed, wide), wide);
+      default: return _sep(_tools(ed, wide), wide);
     }
   }
 
-  // --------------------------------------------------------------- HOME
   List<Widget> _home(EditorController ed, bool wide) {
     final st = ed.currentStyle;
     final p = ed.activePara;
@@ -162,25 +162,21 @@ class _RibbonState extends State<Ribbon> with SingleTickerProviderStateMixin {
           icon: Icons.format_color_text,
           tooltip: 'لون الخط',
           indicator: Color(st.color),
-          onTap: has
-              ? () async {
+          onTap: has ? () async {
                   final c = await pickColor(context, Color(st.color), title: 'لون الخط');
                   if (c != null) ed.setColor(c);
                   ed.refocus();
-                }
-              : null,
+                } : null,
         ),
         ToolButton(
           icon: Icons.border_color,
           tooltip: 'لون التظليل',
           indicator: st.highlight == null ? Colors.yellow : Color(st.highlight!),
-          onTap: has
-              ? () async {
+          onTap: has ? () async {
                   final c = await pickColor(context, Color(st.highlight ?? 0xFFFFEB3B), title: 'لون التظليل', allowNone: true);
                   if (c != null) ed.setHighlight(c.alpha == 0 ? null : c);
                   ed.refocus();
-                }
-              : null,
+                } : null,
         ),
       ]),
       RibbonGroup(label: 'الفقرة', wide: wide, maxWidth: 330, children: [
@@ -198,7 +194,6 @@ class _RibbonState extends State<Ribbon> with SingleTickerProviderStateMixin {
     ];
   }
 
-  // ------------------------------------------------------------- INSERT
   List<Widget> _insert(EditorController ed, bool wide) {
     final inTable = ed.activeTable != null && ed.activePara != null;
     final box = ed.activeBox;
@@ -255,25 +250,21 @@ class _RibbonState extends State<Ribbon> with SingleTickerProviderStateMixin {
         ToolButton(
           icon: Icons.format_color_fill,
           tooltip: 'لون خلفية الخلية',
-          onTap: inTable
-              ? () async {
+          onTap: inTable ? () async {
                   final c = await pickColor(context, Colors.yellow.shade200, title: 'خلفية الخلية', allowNone: true);
                   if (c != null) ed.setCellBg(c.alpha == 0 ? null : c);
                   ed.refocus();
-                }
-              : null,
+                } : null,
         ),
         ToolButton(
           icon: Icons.border_all,
           tooltip: 'حدود الجدول',
-          onTap: inTable
-              ? () async {
+          onTap: inTable ? () async {
                   final t = ed.activeTable!;
                   final r = await showBorderDialog(context, t.borderColor, t.borderWidth);
                   if (r != null) ed.setTableBorder(r.$1, r.$2);
                   ed.refocus();
-                }
-              : null,
+                } : null,
         ),
         ToolButton(icon: Icons.delete_outline, tooltip: 'حذف الجدول', onTap: inTable ? ed.deleteActiveTable : null),
       ]),
@@ -283,9 +274,7 @@ class _RibbonState extends State<Ribbon> with SingleTickerProviderStateMixin {
           icon: Icons.functions,
           label: 'رموز',
           tooltip: 'رموز كيميائية ورياضية',
-          onTap: ed.activePara == null
-              ? null
-              : () async {
+          onTap: ed.activePara == null ? null : () async {
                   await showSymbolPicker(context);
                   ed.refocus();
                 },
@@ -294,7 +283,6 @@ class _RibbonState extends State<Ribbon> with SingleTickerProviderStateMixin {
     ];
   }
 
-  // ------------------------------------------------------------- LAYOUT
   List<Widget> _layout(EditorController ed, bool wide) {
     final d = ed.doc;
     return [
@@ -351,7 +339,6 @@ class _RibbonState extends State<Ribbon> with SingleTickerProviderStateMixin {
     ];
   }
 
-  // -------------------------------------------------------------- TOOLS
   List<Widget> _tools(EditorController ed, bool wide) {
     return [
       RibbonGroup(label: 'ملف', wide: wide, maxWidth: 300, children: [
@@ -382,30 +369,10 @@ class _RibbonState extends State<Ribbon> with SingleTickerProviderStateMixin {
         ),
       ]),
       RibbonGroup(label: 'تصدير', wide: wide, maxWidth: 300, children: [
-        ToolButton(
-          icon: Icons.picture_as_pdf,
-          label: 'PDF',
-          tooltip: 'تصدير PDF',
-          onTap: () => _run('جارٍ إنشاء PDF…', () => ExportService.sharePdf(ed.doc)),
-        ),
-        ToolButton(
-          icon: Icons.print,
-          label: 'معاينة',
-          tooltip: 'معاينة وطباعة',
-          onTap: () => _run('جارٍ إنشاء المعاينة…', () => ExportService.previewPdf(ed.doc)),
-        ),
-        ToolButton(
-          icon: Icons.html,
-          label: 'HTML',
-          tooltip: 'تصدير HTML',
-          onTap: () => _run('جارٍ التجهيز…', () => ExportService.shareHtml(ed.doc)),
-        ),
-        ToolButton(
-          icon: Icons.text_snippet_outlined,
-          label: 'نص',
-          tooltip: 'تصدير نص عادي',
-          onTap: () => _run('جارٍ التجهيز…', () => ExportService.shareText(ed.doc)),
-        ),
+        ToolButton(icon: Icons.picture_as_pdf, label: 'PDF', tooltip: 'تصدير PDF', onTap: () => _run('جارٍ إنشاء PDF…', () => ExportService.sharePdf(ed.doc))),
+        ToolButton(icon: Icons.print, label: 'معاينة', tooltip: 'معاينة وطباعة', onTap: () => _run('جارٍ إنشاء المعاينة…', () => ExportService.previewPdf(ed.doc))),
+        ToolButton(icon: Icons.html, label: 'HTML', tooltip: 'تصدير HTML', onTap: () => _run('جارٍ التجهيز…', () => ExportService.shareHtml(ed.doc))),
+        ToolButton(icon: Icons.text_snippet_outlined, label: 'نص', tooltip: 'تصدير نص عادي', onTap: () => _run('جارٍ التجهيز…', () => ExportService.shareText(ed.doc))),
       ]),
     ];
   }
